@@ -1,0 +1,8 @@
+# Sur rpi502 (Ubuntu Server, Raspberry Pi 5), le module GPIO bas niveau utilise
+# par Blinka (lgpio) n'a pas de wheel precompile pour cette plateforme/version
+# de Python : installer le paquet systeme avant de creer le venv, puis creer
+# le venv avec --system-site-packages pour qu'il le voie :
+#   sudo apt install python3-lgpio
+#   python3 -m venv .venv --system-site-packages
+adafruit-circuitpython-pca9685
+adafruit-blinka

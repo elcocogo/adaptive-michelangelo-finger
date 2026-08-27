@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment (see requirements.txt for how it's created on rpi502)
+.venv/
+
+# Calibration/runtime state: specific to whatever servos are physically
+# plugged in right now, and servo_positions.json changes on every move —
+# neither belongs in version control.
+calibration_data/
+
+# Named pipe created locally by the GPIO library, not a real file
+.lgd-nfy0
