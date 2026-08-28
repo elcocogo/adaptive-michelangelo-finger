@@ -6,3 +6,5 @@
 #   python3 -m venv .venv --system-site-packages
 adafruit-circuitpython-pca9685
 adafruit-blinka
+adafruit-extended-bus
+opencv-contrib-python

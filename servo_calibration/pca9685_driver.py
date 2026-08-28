@@ -7,12 +7,21 @@ angle-based control belongs elsewhere, built on top of ServoCalibration.
 
 from __future__ import annotations
 
-import board
-import busio
+from adafruit_extended_bus import ExtendedI2C
 from adafruit_pca9685 import PCA9685
 
 DEFAULT_FREQUENCY_HZ = 50
 DEFAULT_I2C_ADDRESS = 0x40
+
+# rpi502's hardware I2C1 (GPIO2/GPIO3, the header's usual SDA/SCL) started
+# throwing "lost arbitration" errors and stopped responding on 2026-08-27,
+# reproduced across 3 different PCA9685 boards -> the Pi's own I2C1
+# controller/pins, not the boards. Bus 3 is a software (bit-banged) I2C
+# bus on GPIO23/GPIO24 instead, set up via `dtoverlay=i2c-gpio,bus=3` in
+# /boot/firmware/config.txt, confirmed working. Wire the PCA9685's SDA/SCL
+# there instead of the header's dedicated I2C pins until rpi502's I2C1 is
+# repaired or the board is replaced.
+DEFAULT_I2C_BUS = 3
 
 
 class Pca9685Driver:
@@ -20,8 +29,9 @@ class Pca9685Driver:
         self,
         frequency_hz: int = DEFAULT_FREQUENCY_HZ,
         address: int = DEFAULT_I2C_ADDRESS,
+        i2c_bus: int = DEFAULT_I2C_BUS,
     ) -> None:
-        i2c = busio.I2C(board.SCL, board.SDA)
+        i2c = ExtendedI2C(i2c_bus)
         self._pca = PCA9685(i2c, address=address)
         self._pca.frequency = frequency_hz
         self.frequency_hz = frequency_hz

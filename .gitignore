@@ -12,3 +12,7 @@ calibration_data/
 
 # Named pipe created locally by the GPIO library, not a real file
 .lgd-nfy0
+
+# Generated print-ready calibration targets (derived from generate_targets.py,
+# not source — regenerate rather than version).
+camera_calibration/print_targets/
