@@ -1,6 +1,6 @@
 # Servo calibration and control (PCA9685)
 
-Three command-line tools for working with the servos wired to the PCA9685:
+Command-line tools for working with the servos wired to the PCA9685:
 
 - **`calibrate_servo.py`**: run once per servo, right after mounting it on
   the arm, to find its center pulse (0°) and min/max bounds by hand.
@@ -8,8 +8,10 @@ Three command-line tools for working with the servos wired to the PCA9685:
   already-calibrated servo directly to a given angle in degrees.
 - **`arm_show.py`**: once all 5 servos are calibrated, a small demo
   choreography that chains poses across the whole arm.
+- **`go_home.py`**: returns the arm to its home position (vertical, all 5
+  angles at 0°) — also used by `tracking/follow_target.py` on quit.
 
-All three rely on the same driver ([pca9685_driver.py](pca9685_driver.py))
+All of these rely on the same driver ([pca9685_driver.py](pca9685_driver.py))
 and the same shared calibration ([calibration.py](calibration.py)), stored
 in `calibration_data/servos.json` at the project root.
 
@@ -214,6 +216,26 @@ Like `move_servo.py`, the script reuses
 startup, and never releases the arm automatically (`Ctrl+C` cleanly
 interrupts the show without leaving the arm in an inconsistent state —
 it keeps its last pose).
+
+## 4. `go_home.py` — return to home position
+
+Moves all 5 channels to 0° (vertical, gripper half-open) — the same
+`HOME` pose `arm_show.py` starts and ends its sequence with.
+
+```bash
+python3 -m servo_calibration.go_home
+python3 -m servo_calibration.go_home --speed 40
+```
+
+| Argument | Description |
+|---|---|
+| `--file` | Calibration file to use (default: `calibration_data/servos.json`) |
+| `--speed` | Movement speed as % of the servo's assumed max speed, 10 to 100 (default: 50) |
+
+Exposes a `go_home()` function (not just the CLI) so other tools can
+return the arm home programmatically —
+`tracking/follow_target.py` calls it when you quit, so the arm doesn't
+stay wherever it last happened to be pointing.
 
 ## Safety
 
