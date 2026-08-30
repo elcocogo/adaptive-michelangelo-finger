@@ -1,6 +1,6 @@
 # Stereo cameras: positioning and calibration
 
-Four tools, in the order you'd use them:
+Five tools, in the order you'd use them:
 
 1. **`live_view.py`**: live feed from both cameras to physically position
    them (not an OpenCV calibration — see its own section).
@@ -10,6 +10,9 @@ Four tools, in the order you'd use them:
    both cameras, with live detection to guide the shots.
 4. **`calibrate_stereo.py`**: computes the calibration (each camera's
    intrinsics + their relative position) from the captured pairs.
+5. **`calibrate_camera_to_arm.py`**: computes the transform between the
+   camera pair and the arm's own reference frame, from two floor-mounted
+   ArUco markers.
 
 `rpi502` has no desktop — the two tools with a live preview
 (`live_view.py`, `capture_stereo_images.py`) serve their feed as MJPEG
@@ -149,13 +152,66 @@ views. That 3D point comes out in camera 0's coordinate frame, not the
 arm's — converting between the two is the camera-to-arm calibration this
 stereo calibration unblocks.
 
+## 5. `calibrate_camera_to_arm.py` — locating the arm in camera space
+
+Computes the rigid transform from camera 0's frame to the arm's own
+reference frame: **origin** at the point on the floor directly below the
+`base_joint` rotation axis, **X** pointing wherever the arm faces at
+`base_joint = 0`, **Z** vertical (up).
+
+Setup: tape two standalone ArUco tags (from `generate_targets.py`) flat
+on the floor next to the arm — not on the base itself, since it isn't
+flat and can be hidden by the arm depending on its pose. Set
+`base_joint` to exactly 0° first (`move_servo.py`), since that's what
+fixes which direction counts as X. Then measure each tag's **center**
+position with a ruler/tape measure: how far along X (forward) and along
+Y (sideways) from the origin. Both tags lie on the floor, so their Z is 0
+by construction — you don't need to measure it, and you don't need to
+align the tags to any particular rotation either (see below).
+
+```bash
+python3 -m camera_calibration.calibrate_camera_to_arm \
+    --marker1-id 0 --marker1-x-mm 150 --marker1-y-mm 120 \
+    --marker2-id 1 --marker2-x-mm 150 --marker2-y-mm -120 \
+    --samples 20
+```
+
+| Argument | Description |
+|---|---|
+| `--marker1-id`, `--marker2-id` | Which two standalone ArUco tag IDs were placed (see `generate_targets.py`) |
+| `--marker1-x-mm`/`-y-mm`, `--marker2-x-mm`/`-y-mm` | Each tag's measured center position, in mm, along the arm frame's X/Y axes |
+| `--samples` | Frames to average over while both tags sit still (default 20) — averaging cancels out per-frame detection jitter |
+
+Why only two measured positions are enough to fix a full 3D transform
+(3 axes + origin, 6 degrees of freedom): each tag's *position* is what
+you measure by hand, but its *orientation* doesn't need measuring at all
+— a flat tag's own 4 corners define a plane once triangulated, and that
+plane's normal is, by construction, straight up out of the floor (the
+arm frame's Z axis), independent of how the tag happens to be rotated
+where it's taped down. Two floor positions plus that (cross-checked
+between both tags) normal fully determine the transform.
+
+The script prints two sanity checks before saving:
+- **Floor-normal agreement** between the two tags' independently-detected
+  normals — should be a couple of degrees or less; a bigger gap suggests
+  a tag isn't flat or the floor isn't level there.
+- **Measured vs. triangulated distance** between the two tags — should
+  match closely; a large gap suggests a measurement mistake or a tag
+  that moved after being measured.
+
+Result saved to `calibration_data/camera_to_arm.json` (rotation,
+translation, and both validation numbers, for later reference).
+
 ## Prerequisites
 
 - Arm channels 0 and 1 already calibrated (`calibrate_servo.py`), for
-  `live_view.py`.
+  `live_view.py` and `calibrate_camera_to_arm.py` (which sets `base_joint`
+  as the X-axis reference).
 - ChArUco board printed (see `generate_targets.py` above), mounted on a
   rigid, flat backing, with the real square size measured and recorded in
   `charuco_board.py`.
+- `calibration_data/stereo_calibration.json` already computed
+  (`calibrate_stereo.py`), for `calibrate_camera_to_arm.py`.
 - Dependencies: `picamera2` and `Pillow` come from system packages already
   in place (see `CLAUDE.md`); `opencv-contrib-python` is in
   `requirements.txt` (the `cv2.aruco` module is needed for ChArUco/ArUco).
