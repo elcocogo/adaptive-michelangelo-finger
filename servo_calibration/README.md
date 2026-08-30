@@ -1,38 +1,34 @@
-# Calibration et pilotage des servos (PCA9685)
+# Servo calibration and control (PCA9685)
 
-Trois outils en ligne de commande pour travailler avec les servos branchés
-sur le PCA9685 :
+Three command-line tools for working with the servos wired to the PCA9685:
 
-- **`calibrate_servo.py`** : à lancer une fois par servo, juste après
-  l'avoir monté sur le bras, pour trouver à la main son impulsion centre
-  (0°) et ses bornes min/max.
-- **`move_servo.py`** : à lancer ensuite, autant de fois que besoin, pour
-  piloter un servo déjà calibré en lui donnant directement un angle en
-  degrés.
-- **`arm_show.py`** : une fois les 5 servos calibrés, une petite
-  chorégraphie de démonstration qui enchaîne des poses sur le bras
-  complet.
+- **`calibrate_servo.py`**: run once per servo, right after mounting it on
+  the arm, to find its center pulse (0°) and min/max bounds by hand.
+- **`move_servo.py`**: run afterwards, as often as needed, to drive an
+  already-calibrated servo directly to a given angle in degrees.
+- **`arm_show.py`**: once all 5 servos are calibrated, a small demo
+  choreography that chains poses across the whole arm.
 
-Les trois s'appuient sur le même driver ([pca9685_driver.py](pca9685_driver.py))
-et la même calibration partagée ([calibration.py](calibration.py)), stockée
-dans `calibration_data/servos.json` à la racine du projet.
+All three rely on the same driver ([pca9685_driver.py](pca9685_driver.py))
+and the same shared calibration ([calibration.py](calibration.py)), stored
+in `calibration_data/servos.json` at the project root.
 
-## Prérequis
+## Prerequisites
 
-- PCA9685 câblé (I2C sur le header GPIO + alim externe séparée sur le bloc
-  V+) et détecté :
+- PCA9685 wired (I2C on the GPIO header + a separate external supply on
+  the V+ block) and detected:
   ```bash
-  i2cdetect -y 1   # doit montrer 40 à la ligne 40
+  i2cdetect -y 1   # should show 40 on the 40 row
   ```
-- Environnement virtuel activé :
+- Virtual environment activated:
   ```bash
   cd ~/michelangelo && source .venv/bin/activate
   ```
 
-## Fichier de calibration
+## Calibration file
 
-`calibration_data/servos.json` est un unique fichier JSON, partagé par tous
-les servos, indexé par numéro de canal PCA9685 :
+`calibration_data/servos.json` is a single JSON file, shared by all
+servos, indexed by PCA9685 channel number:
 
 ```json
 {
@@ -52,17 +48,17 @@ les servos, indexé par numéro de canal PCA9685 :
 }
 ```
 
-Chaque calibration (sauvegarde) ne touche que l'entrée de son propre canal :
-calibrer ou recalibrer un servo ne risque jamais d'écraser les autres.
+Each calibration save only touches its own channel's entry: calibrating
+or recalibrating a servo never risks overwriting the others.
 
-`move_servo.py` tient par ailleurs à jour un second fichier,
-`calibration_data/servo_positions.json`, qui retient le dernier angle
-*commandé* par canal (voir la section dédiée plus bas) — pas besoin d'y
-toucher à la main, il est géré automatiquement.
+`move_servo.py` also maintains a second file,
+`calibration_data/servo_positions.json`, which tracks the last
+*commanded* angle per channel (see the dedicated section below) — no need
+to touch it by hand, it's managed automatically.
 
-## 1. `calibrate_servo.py` — calibration interactive
+## 1. `calibrate_servo.py` — interactive calibration
 
-À faire une fois par servo (ou pour recalibrer un servo déjà monté).
+Do this once per servo (or to recalibrate one already mounted).
 
 ```bash
 python3 -m servo_calibration.calibrate_servo --channel 0 --name shoulder
@@ -70,168 +66,167 @@ python3 -m servo_calibration.calibrate_servo --channel 0 --name shoulder
 
 | Argument | Description |
 |---|---|
-| `--channel` | Canal PCA9685 du servo (0-15), obligatoire |
-| `--name` | Nom du servo (ex. `shoulder`, `elbow`). Optionnel si le canal a déjà une calibration existante — reprend son nom |
-| `--file` | Fichier de calibration à utiliser (défaut : `calibration_data/servos.json`) |
-| `--frequency` | Fréquence PWM en Hz (défaut : 50) |
+| `--channel` | PCA9685 channel of the servo (0-15), required |
+| `--name` | Servo name (e.g. `shoulder`, `elbow`). Optional if the channel already has a calibration — reuses its name |
+| `--file` | Calibration file to use (default: `calibration_data/servos.json`) |
+| `--frequency` | PWM frequency in Hz (default: 50) |
 
-**Contrôles au clavier (touche seule, sans Entrée) :**
+**Keyboard controls (single keypress, no Enter needed):**
 
-| Touche | Action |
+| Key | Action |
 |---|---|
-| `h` / `l` | diminue / augmente l'impulsion d'un pas (10µs par défaut) |
-| `H` / `L` | idem, pas x10 |
-| `[` / `]` | divise / double la taille du pas |
-| `c` | marque la position actuelle comme le centre (0°) |
-| `n` | marque la position actuelle comme borne min (demande l'angle, ex. `-90`) |
-| `x` | marque la position actuelle comme borne max (demande l'angle, ex. `90`) |
-| `p` | affiche l'état courant |
-| `r` | coupe le PWM (relâche le servo) |
-| `s` | sauvegarde dans le fichier de calibration |
-| `?` | réaffiche l'aide |
-| `q` | quitte (demande confirmation si non sauvegardé) |
+| `h` / `l` | decrease / increase the pulse by one step (10µs by default) |
+| `H` / `L` | same, step x10 |
+| `[` / `]` | halve / double the step size |
+| `c` | marks the current position as center (0°) |
+| `n` | marks the current position as the min bound (asks for the angle, e.g. `-90`) |
+| `x` | marks the current position as the max bound (asks for the angle, e.g. `90`) |
+| `p` | prints the current status |
+| `r` | cuts the PWM (releases the servo) |
+| `s` | saves to the calibration file |
+| `?` | shows the help again |
+| `q` | quits (asks for confirmation if unsaved) |
 
-**Procédure, à chaque nouveau servo branché :**
+**Procedure, for every newly wired servo:**
 
-1. Brancher le servo sur un canal libre du PCA9685, noter le canal et
-   l'articulation qu'il représente.
-2. Lancer l'outil avec ce canal et un nom explicite.
-3. Amener doucement le servo (`h`/`l`, `H`/`L`, ajuster le pas avec
-   `[`/`]`) à la position voulue pour le 0°, puis `c`.
-4. Continuer jusqu'à la limite mécanique choisie dans un sens — **en
-   s'arrêtant avant la butée dure**, jamais dessus — puis `n` et l'angle
-   correspondant.
-5. Même chose dans l'autre sens, puis `x`.
-6. Vérifier avec `p` que les 3 pulses et les 2 angles sont cohérents.
-7. Sauvegarder avec `s`.
-8. `r` pour relâcher le servo (utile pour manipuler le bras à la main
-   ensuite), puis `q` pour quitter.
+1. Plug the servo into a free PCA9685 channel, note the channel and which
+   joint it represents.
+2. Launch the tool with that channel and an explicit name.
+3. Gently bring the servo (`h`/`l`, `H`/`L`, adjust the step with `[`/`]`)
+   to the position you want for 0°, then `c`.
+4. Continue to the mechanical limit you've chosen in one direction —
+   **stopping short of the hard stop**, never against it — then `n` and
+   the corresponding angle.
+5. Same thing in the other direction, then `x`.
+6. Check with `p` that the 3 pulses and 2 angles are consistent.
+7. Save with `s`.
+8. `r` to release the servo (useful for handling the arm afterwards),
+   then `q` to quit.
 
-Quoi qu'il arrive, l'impulsion envoyée reste bornée à
-`[400, 2600]` µs (`HARD_PULSE_MIN_US`/`HARD_PULSE_MAX_US` dans
-`calibrate_servo.py`) — une protection logicielle qui ne remplace pas la
-vigilance sur les butées mécaniques réelles pendant la calibration.
+Whatever happens, the pulse sent is always clamped to `[400, 2600]` µs
+(`HARD_PULSE_MIN_US`/`HARD_PULSE_MAX_US` in `calibrate_servo.py`) — a
+software safeguard that doesn't replace staying alert to the arm's real
+mechanical limits during calibration.
 
-## 2. `move_servo.py` — pilotage par angle
+## 2. `move_servo.py` — angle-based control
 
-Une fois un servo calibré, pour le positionner directement à un angle
-donné (ex. après un redémarrage, pour tester une pose, ou remettre un
-servo à 0° avant de continuer le montage du bras).
+Once a servo is calibrated, use this to position it directly at a given
+angle (e.g. after a restart, to test a pose, or to reset a servo to 0°
+before continuing to build the arm).
 
 ```bash
 python3 -m servo_calibration.move_servo --channel 0
-# ou
+# or
 python3 -m servo_calibration.move_servo --name shoulder
-# ou, sans argument, il demande le canal ou le nom au lancement
+# or, with no argument, it asks for the channel or name at startup
 python3 -m servo_calibration.move_servo
 ```
 
 | Argument | Description |
 |---|---|
-| `--channel` | Canal PCA9685 du servo à piloter |
-| `--name` | Nom du servo (tel qu'enregistré lors de la calibration) |
-| `--file` | Fichier de calibration à utiliser (défaut : `calibration_data/servos.json`) |
-| `--speed` | Vitesse de déplacement en % de la vitesse max supposée du servo, de 10 à 100 (défaut : 70) |
+| `--channel` | PCA9685 channel of the servo to control |
+| `--name` | Servo name (as saved during calibration) |
+| `--file` | Calibration file to use (default: `calibration_data/servos.json`) |
+| `--speed` | Movement speed as % of the servo's assumed max speed, 10 to 100 (default: 70) |
 
-`--channel` et `--name` sont mutuellement exclusifs ; si aucun des deux
-n'est fourni, l'outil le demande de façon interactive au démarrage.
+`--channel` and `--name` are mutually exclusive; if neither is given, the
+tool asks interactively at startup.
 
-**Limitation de vitesse (`--speed`)** : le PCA9685 ne fait qu'imposer une
-largeur d'impulsion, il n'a aucun contrôle natif sur la vitesse du servo —
-un servo commandé d'un coup de min à max accélère donc au maximum de ses
-capacités, ce qui peut être violent pour un bras encore fragile. `move_servo.py`
-compense en envoyant des positions intermédiaires (rampe), à 50 mises à
-jour par seconde, entre l'angle courant et l'angle demandé. `--speed 100`
-correspond à une vitesse pleine échelle supposée (`MAX_SERVO_SPEED_DEG_PER_S`
-dans le script, 300°/s par défaut — une estimation générique pour un servo
-hobby, à ajuster si besoin), `--speed 10` déplace 10x plus lentement.
+**Speed limiting (`--speed`)**: the PCA9685 only sets a pulse width, it
+has no native control over the servo's speed — a servo commanded
+straight from min to max therefore accelerates at the full extent of its
+own capabilities, which can be rough on a still-fragile arm.
+`move_servo.py` compensates by sending intermediate positions (a ramp),
+at 50 updates per second, between the current angle and the requested
+one. `--speed 100` corresponds to an assumed full-scale speed
+(`MAX_SERVO_SPEED_DEG_PER_S` in the script, 300°/s by default — a generic
+estimate for a hobby servo, adjust if needed), `--speed 10` moves 10x
+slower.
 
-Comme le pilotage est en boucle ouverte (pas de retour de position réel),
-la rampe a besoin de connaître l'angle de départ. Le PCA9685 continue de
-piloter un canal à sa dernière impulsion commandée même après la fermeture
-du script — donc `move_servo.py` retient le dernier angle commandé dans
-`calibration_data/servo_positions.json` et le recharge au lancement
-suivant. Résultat : `--speed` s'applique dès la toute première commande
-d'une nouvelle invocation, tant que le servo n'a pas été relâché (`r`) ou
-déplacé à la main entre-temps — ce qui est le cas d'usage le plus courant
-(une commande, puis on quitte).
+Since control is open-loop (no real position feedback), the ramp needs to
+know the starting angle. The PCA9685 keeps driving a channel at its last
+commanded pulse even after the script exits — so `move_servo.py` remembers
+the last commanded angle in `calibration_data/servo_positions.json` and
+reloads it on the next launch. Result: `--speed` applies from the very
+first command of a fresh invocation, as long as the servo hasn't been
+released (`r`) or moved by hand in the meantime — which is the most
+common use case (one command, then quit).
 
-Quitter avec `q` **ne coupe pas le PWM** : le servo garde sa position.
-Seul `r` relâche le servo, et efface aussi la position enregistrée
-puisqu'elle n'est plus fiable après (le bras peut avoir bougé à la main).
+Quitting with `q` **does not cut the PWM**: the servo keeps its position.
+Only `r` releases the servo, and also clears the saved position since
+it's no longer reliable afterwards (the arm may have been moved by hand).
 
-**Contrôles :**
+**Controls:**
 
-| Entrée | Action |
+| Input | Action |
 |---|---|
-| un nombre (ex. `12.5`, `-30`) | déplace le servo à cet angle en degrés |
-| `c` | va au centre (0°) |
-| `n` | va à la borne min calibrée |
-| `x` | va à la borne max calibrée |
-| `r` | coupe le PWM (relâche le servo), oublie la position enregistrée |
-| `q` | quitte — le servo garde sa position (PWM toujours actif) |
+| a number (e.g. `12.5`, `-30`) | moves the servo to that angle in degrees |
+| `c` | goes to center (0°) |
+| `n` | goes to the calibrated min bound |
+| `x` | goes to the calibrated max bound |
+| `r` | cuts the PWM (releases the servo), forgets the saved position |
+| `q` | quits — the servo keeps its position (PWM still active) |
 
-Un angle en dehors de `[angle_min_deg, angle_max_deg]` est **refusé avec un
-message d'erreur**, sans bouger le servo :
+An angle outside `[angle_min_deg, angle_max_deg]` is **rejected with an
+error message**, without moving the servo:
 
 ```
 > 200
   Erreur : 200.0 deg hors bornes [-90.0, 90.0] pour 'shoulder'.
 ```
 
-Le script ne déplace jamais le servo automatiquement au démarrage — la
-première commande est toujours explicite.
+The script never moves the servo automatically at startup — the first
+command is always explicit.
 
-## 3. `arm_show.py` — chorégraphie de démonstration
+## 3. `arm_show.py` — demo choreography
 
-Une fois les 5 canaux (0 à 4) calibrés, enchaîne automatiquement une série
-de poses sur le bras complet : extension au loin, repli compact, rotation
-de la base sur 180°, pliage du coude et du poignet, ouverture/fermeture de
-la pince, puis quelques mouvements combinés (plusieurs articulations à la
-fois).
+Once all 5 channels (0 to 4) are calibrated, automatically runs through a
+series of poses across the whole arm: full extension, compact fold, 180°
+base rotation, elbow and wrist bending, gripper opening/closing, then a
+few combined movements (several joints at once).
 
 ```bash
 python3 -m servo_calibration.arm_show
-# vitesse et pause entre poses ajustables :
+# adjustable speed and pause between poses:
 python3 -m servo_calibration.arm_show --speed 40 --pause 1.0
 ```
 
 | Argument | Description |
 |---|---|
-| `--file` | Fichier de calibration à utiliser (défaut : `calibration_data/servos.json`) |
-| `--speed` | Vitesse de déplacement en % de la vitesse max supposée du servo, de 10 à 100 (défaut : 60) |
-| `--pause` | Pause en secondes entre deux poses (défaut : 0.6) |
+| `--file` | Calibration file to use (default: `calibration_data/servos.json`) |
+| `--speed` | Movement speed as % of the servo's assumed max speed, 10 to 100 (default: 60) |
+| `--pause` | Pause in seconds between two poses (default: 0.6) |
 
-Chaque pose ne cite que les canaux qu'elle change ; les autres restent où
-ils étaient. Quand une pose bouge plusieurs canaux à la fois, le
-mouvement est **synchronisé** : le canal qui doit parcourir le plus grand
-angle fixe la durée du déplacement (à `--speed`), les autres canaux de
-cette même pose sont interpolés sur la même durée pour arriver tous
-ensemble, plutôt que de finir en escalier.
+Each pose only lists the channels it changes; the others stay wherever
+they were. When a pose moves several channels at once, the movement is
+**synchronized**: the channel with the largest angle to cover sets the
+pace (at `--speed`), the other channels in that same pose are interpolated
+over the same duration so they all arrive together instead of finishing
+in a staggered sequence.
 
-Les canaux 1/2/3 (`base_arm`/`mid_arm`/`gripper_arm`) suivent une
-convention d'angle *relative au segment parent* (voir la calibration
-initiale) : `mid_arm=0°` ne veut pas dire qu'il pointe vers le haut, mais
-qu'il continue tout droit dans la direction de `base_arm`, quelle qu'elle
-soit.
+Channels 1/2/3 (`base_arm`/`mid_arm`/`gripper_arm`) follow an angle
+convention *relative to the parent segment* (see the initial
+calibration): `mid_arm=0°` doesn't mean it points up, it means it
+continues straight in whatever direction `base_arm` is pointing.
 
-Comme `move_servo.py`, le script réutilise `calibration_data/servo_positions.json`
-pour connaître la position réelle au démarrage, et ne relâche jamais le
-bras automatiquement (`Ctrl+C` interrompt proprement le show sans laisser
-le bras dans un état incohérent — il garde sa dernière pose).
+Like `move_servo.py`, the script reuses
+`calibration_data/servo_positions.json` to know the real position at
+startup, and never releases the arm automatically (`Ctrl+C` cleanly
+interrupts the show without leaving the arm in an inconsistent state —
+it keeps its last pose).
 
-## Sécurité
+## Safety
 
-- Alimentation des servos (bloc V+ du PCA9685) toujours séparée du 5V du
-  Pi, sur une alim externe dédiée.
-- Impulsion toujours bornée en dur côté logiciel (`calibrate_servo.py`),
-  mais ça ne dispense pas de rester attentif aux butées mécaniques réelles
-  du bras pendant une calibration.
-- `r` (relâcher / couper le PWM) est disponible dans les deux outils —
-  à utiliser avant toute manipulation à la main du bras.
-- Dans `move_servo.py` et `arm_show.py`, quitter (`q`, fin normale, ou
-  `Ctrl+C`) **ne relâche pas** les servos : ils restent activement
-  maintenus à leur dernière position commandée. C'est voulu (ces outils
-  servent justement à fixer une position et la garder), mais ça veut dire
-  qu'un servo peut rester sous tension/couple après la fin
-  du script — pense à `r` si tu veux le relâcher explicitement.
+- Servo power (PCA9685's V+ block) always kept separate from the Pi's 5V,
+  on a dedicated external supply.
+- The pulse sent is always hard-clamped in software (`calibrate_servo.py`),
+  but that doesn't excuse staying alert to the arm's real mechanical
+  limits during a calibration.
+- `r` (release / cut the PWM) is available in both interactive tools —
+  use it before handling the arm by hand.
+- In `move_servo.py` and `arm_show.py`, quitting (`q`, normal end, or
+  `Ctrl+C`) **does not release** the servos: they stay actively held at
+  their last commanded position. This is intentional (these tools exist
+  precisely to set a position and keep it), but it means a servo can
+  remain powered/under torque after the script ends — remember `r` if you
+  want to release it explicitly.

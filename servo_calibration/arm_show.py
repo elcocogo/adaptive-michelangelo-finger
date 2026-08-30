@@ -55,11 +55,11 @@ from servo_calibration.calibration import (
 from servo_calibration.pca9685_driver import Pca9685Driver
 
 # Channels, named after the segment each one moves (see the chain above).
-CH_BASE_SPIN = 0    # base -> base_spin, lacet du bras entier autour de Z
-CH_BASE_ARM = 1      # base_spin -> base_arm ("epaule"), 0 deg = vertical
-CH_MID_ARM = 2        # base_arm -> mid_arm ("coude"), 0 deg = aligne avec base_arm
-CH_GRIPPER_ARM = 3    # mid_arm -> gripper_arm ("poignet"), 0 deg = aligne avec mid_arm
-CH_GRIPPER = 4         # gripper_arm -> finger, ouverture de la pince
+CH_BASE_SPIN = 0    # base -> base_spin, yaw of the whole arm around Z
+CH_BASE_ARM = 1      # base_spin -> base_arm ("shoulder"), 0 deg = vertical
+CH_MID_ARM = 2        # base_arm -> mid_arm ("elbow"), 0 deg = aligned with base_arm
+CH_GRIPPER_ARM = 3    # mid_arm -> gripper_arm ("wrist"), 0 deg = aligned with mid_arm
+CH_GRIPPER = 4         # gripper_arm -> finger, gripper opening
 
 ALL_CHANNELS = (CH_BASE_SPIN, CH_BASE_ARM, CH_MID_ARM, CH_GRIPPER_ARM, CH_GRIPPER)
 
@@ -71,32 +71,32 @@ Pose = Dict[int, float]
 HOME: Pose = {CH_BASE_SPIN: 0.0, CH_BASE_ARM: 0.0, CH_MID_ARM: 0.0, CH_GRIPPER_ARM: 0.0, CH_GRIPPER: 0.0}
 
 SEQUENCE: List[Tuple[str, Pose]] = [
-    ("Position de depart (bras vertical, pince entre-ouverte)", HOME),
-    ("Extension complete a l'horizontale (bras tendu au loin)",
+    ("Starting position (arm vertical, gripper half-open)", HOME),
+    ("Full horizontal extension (arm reaching out)",
      {CH_BASE_ARM: 90.0, CH_MID_ARM: 0.0, CH_GRIPPER_ARM: 0.0}),
-    ("Repli compact (plie en Z sur lui-meme)",
+    ("Compact fold (folded in a Z onto itself)",
      {CH_BASE_ARM: 90.0, CH_MID_ARM: -90.0, CH_GRIPPER_ARM: -90.0}),
-    ("Retour a la verticale", HOME),
-    ("Rotation de la base a +90 deg", {CH_BASE_SPIN: 90.0}),
-    ("Rotation de la base a -90 deg (180 deg de trajet)", {CH_BASE_SPIN: -90.0}),
-    ("Retour de la base au centre", {CH_BASE_SPIN: 0.0}),
-    ("Pince : ouverture complete", {CH_GRIPPER: 15.0}),
-    ("Pince : fermeture complete", {CH_GRIPPER: -15.0}),
-    ("Pince : entre-ouverte", {CH_GRIPPER: 0.0}),
-    ("Mise en position pour plier le coude", {CH_BASE_ARM: 45.0, CH_MID_ARM: 0.0}),
-    ("Pliage du coude (mid_arm)", {CH_MID_ARM: -80.0}),
-    ("Depliage du coude", {CH_MID_ARM: 80.0}),
-    ("Coude au centre", {CH_MID_ARM: 0.0}),
-    ("Extension du poignet (gripper_arm)", {CH_GRIPPER_ARM: 80.0}),
-    ("Retour du poignet au centre", {CH_GRIPPER_ARM: 0.0}),
-    ("Retour a la verticale avant les mouvements combines", HOME),
-    ("Combine : extension + rotation + pince ouverte",
+    ("Return to vertical", HOME),
+    ("Base rotation to +90 deg", {CH_BASE_SPIN: 90.0}),
+    ("Base rotation to -90 deg (180 deg of travel)", {CH_BASE_SPIN: -90.0}),
+    ("Base return to center", {CH_BASE_SPIN: 0.0}),
+    ("Gripper: full open", {CH_GRIPPER: 15.0}),
+    ("Gripper: full close", {CH_GRIPPER: -15.0}),
+    ("Gripper: half-open", {CH_GRIPPER: 0.0}),
+    ("Getting into position to bend the elbow", {CH_BASE_ARM: 45.0, CH_MID_ARM: 0.0}),
+    ("Elbow bend (mid_arm)", {CH_MID_ARM: -80.0}),
+    ("Elbow unbend", {CH_MID_ARM: 80.0}),
+    ("Elbow to center", {CH_MID_ARM: 0.0}),
+    ("Wrist extension (gripper_arm)", {CH_GRIPPER_ARM: 80.0}),
+    ("Wrist return to center", {CH_GRIPPER_ARM: 0.0}),
+    ("Return to vertical before the combined movements", HOME),
+    ("Combined: extension + rotation + gripper open",
      {CH_BASE_SPIN: 45.0, CH_BASE_ARM: 70.0, CH_MID_ARM: -40.0, CH_GRIPPER_ARM: 30.0, CH_GRIPPER: 15.0}),
-    ("Combine : repli + rotation opposee + pince fermee (comme une prise)",
+    ("Combined: fold + opposite rotation + gripper closed (like a grasp)",
      {CH_BASE_SPIN: -45.0, CH_BASE_ARM: 20.0, CH_MID_ARM: 10.0, CH_GRIPPER_ARM: -10.0, CH_GRIPPER: -15.0}),
-    ("Combine : petit salut (balayage du poignet)",
+    ("Combined: little wave (wrist sweep)",
      {CH_BASE_SPIN: 0.0, CH_BASE_ARM: 40.0, CH_MID_ARM: -20.0, CH_GRIPPER_ARM: 40.0, CH_GRIPPER: 0.0}),
-    ("Retour a la position de depart", HOME),
+    ("Return to starting position", HOME),
 ]
 
 
@@ -107,8 +107,8 @@ def load_calibrations(path) -> Tuple[Dict[int, ServoCalibration], int]:
         raw = data.get("servos", {}).get(str(channel))
         if raw is None:
             sys.exit(
-                f"Canal {channel} non calibre dans {path} — "
-                f"lance calibrate_servo.py --channel {channel} d'abord."
+                f"Channel {channel} not calibrated in {path} — "
+                f"run calibrate_servo.py --channel {channel} first."
             )
         calibs[channel] = ServoCalibration(**raw)
     return calibs, data.get("pwm_frequency_hz", DEFAULT_FREQUENCY_HZ)
@@ -133,12 +133,13 @@ def move_pose(
         calib = calibs[channel]
         if not calib.angle_min_deg <= angle_deg <= calib.angle_max_deg:
             raise ValueError(
-                f"Angle {angle_deg} hors bornes [{calib.angle_min_deg}, {calib.angle_max_deg}] "
-                f"pour le canal {channel} ('{calib.name}')."
+                f"Angle {angle_deg} out of bounds [{calib.angle_min_deg}, {calib.angle_max_deg}] "
+                f"for channel {channel} ('{calib.name}')."
             )
 
-    # Position reelle inconnue (tout premier mouvement, ou apres relache) :
-    # ce canal saute directement a sa cible, faute de point de depart.
+    # Real position unknown (very first move, or after a release): this
+    # channel jumps straight to its target, since there's no known
+    # starting point to ramp from.
     for channel, target_deg in pose.items():
         if current.get(channel) is None:
             calib = calibs[channel]
@@ -184,39 +185,39 @@ def run_show(
             print(f"-> {label}")
             move_pose(driver, calibs, pose, current, speed_deg_per_s, positions_file)
             time.sleep(pause_s)
-        print("Show termine.")
+        print("Show finished.")
     except KeyboardInterrupt:
-        print("\nShow interrompu, le bras reste a sa derniere position.")
+        print("\nShow interrupted, the arm stays at its last position.")
     finally:
         driver.close()
         print(
-            "Le bras garde sa position (PWM toujours actif) — "
-            "utilise move_servo.py avec 'r' si tu veux le relacher."
+            "The arm keeps its position (PWM still active) — "
+            "use move_servo.py with 'r' if you want to release it."
         )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Petite choregraphie de demonstration pour le bras 5 DOF.")
-    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="Fichier de calibration JSON")
+    parser = argparse.ArgumentParser(description="Small demo choreography for the 5-DOF arm.")
+    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="JSON calibration file")
     parser.add_argument(
         "--speed",
         type=float,
         default=DEFAULT_SPEED_PERCENT,
         help=(
-            f"Vitesse de deplacement en %% de la vitesse max supposee du servo "
-            f"({MIN_SPEED_PERCENT:.0f}-{MAX_SPEED_PERCENT:.0f}, defaut {DEFAULT_SPEED_PERCENT:.0f})"
+            f"Movement speed as %% of the servo's assumed max speed "
+            f"({MIN_SPEED_PERCENT:.0f}-{MAX_SPEED_PERCENT:.0f}, default {DEFAULT_SPEED_PERCENT:.0f})"
         ),
     )
     parser.add_argument(
         "--pause",
         type=float,
         default=DEFAULT_PAUSE_S,
-        help=f"Pause en secondes entre deux poses (defaut {DEFAULT_PAUSE_S})",
+        help=f"Pause in seconds between two poses (default {DEFAULT_PAUSE_S})",
     )
     args = parser.parse_args()
 
     if not MIN_SPEED_PERCENT <= args.speed <= MAX_SPEED_PERCENT:
-        parser.error(f"--speed doit etre entre {MIN_SPEED_PERCENT:.0f} et {MAX_SPEED_PERCENT:.0f}")
+        parser.error(f"--speed must be between {MIN_SPEED_PERCENT:.0f} and {MAX_SPEED_PERCENT:.0f}")
 
     calibs, frequency_hz = load_calibrations(args.file)
     speed_deg_per_s = MAX_SERVO_SPEED_DEG_PER_S * (args.speed / 100.0)

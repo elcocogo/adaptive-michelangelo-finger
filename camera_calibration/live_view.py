@@ -14,8 +14,8 @@ forward the port automatically when it sees it opened). The server binds
 0.0.0.0, so it's also reachable directly at http://<ip-du-pi>:<port>/ from
 any device on the same LAN.
 
-While the stream runs, drive channel 0 (base rotation / azimut) and
-channel 1 (epaule : vertical <-> horizontal, per calibrate_servo.py) from
+While the stream runs, drive channel 0 (base rotation / azimuth) and
+channel 1 (shoulder: vertical <-> horizontal, per calibrate_servo.py) from
 the terminal to check both cameras see the arm at its extremes. Reuses
 move_to_angle from move_servo.py, so movement is ramped and the reached
 position is persisted the same way.
@@ -25,11 +25,11 @@ Usage:
     python3 -m camera_calibration.live_view --port 8100 --speed 40
     python3 -m camera_calibration.live_view --layout stacked
 
-Commandes (dans le terminal, pendant que le flux tourne) :
-    0 <angle|c|n|x>   deplace le canal 0 (rotation base / azimut)
-    1 <angle|c|n|x>   deplace le canal 1 (epaule : vertical <-> horizontal)
-    q                 quitte (arrete le flux et le serveur ; le bras garde
-                      sa derniere position, PWM toujours actif)
+Commands (in the terminal, while the stream is running):
+    0 <angle|c|n|x>   moves channel 0 (base rotation / azimuth)
+    1 <angle|c|n|x>   moves channel 1 (shoulder: vertical <-> horizontal)
+    q                 quits (stops the stream and the server; the arm
+                      keeps its last position, PWM still active)
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ from servo_calibration.calibration import (
 from servo_calibration.move_servo import move_to_angle
 from servo_calibration.pca9685_driver import Pca9685Driver
 
-CHANNELS = (0, 1)  # rotation base (azimut), epaule (vertical <-> horizontal)
+CHANNELS = (0, 1)  # base rotation (azimuth), shoulder (vertical <-> horizontal)
 
 DEFAULT_PORT = 8100
 DEFAULT_SPEED_PERCENT = 40.0
@@ -68,16 +68,16 @@ FRAME_SIZE = (640, 480)
 STREAM_FPS = 15
 JPEG_QUALITY = 80
 
-HELP_TEXT = __doc__.split("Commandes", 1)[1]
+HELP_TEXT = __doc__.split("Commands", 1)[1]
 
 
 class CameraStream:
     """Continuously captures from one camera into a shared latest-frame slot."""
 
-    def __init__(self, camera_num: int):
+    def __init__(self, camera_num: int, frame_size=FRAME_SIZE):
         self.camera_num = camera_num
         self._picam = Picamera2(camera_num=camera_num)
-        config = self._picam.create_preview_configuration(main={"size": FRAME_SIZE, "format": "RGB888"})
+        config = self._picam.create_preview_configuration(main={"size": frame_size, "format": "RGB888"})
         self._picam.configure(config)
         self._lock = threading.Lock()
         self._frame = None
@@ -135,13 +135,13 @@ def combined_jpeg(cam0: CameraStream, cam1: CameraStream, layout: str = DEFAULT_
 
 
 INDEX_HTML = b"""<!doctype html>
-<html><head><title>Michelangelo - vue cameras</title>
+<html><head><title>Michelangelo - camera view</title>
 <style>
   body { margin: 0; background: #111; }
   img { display: block; width: 100%; height: auto; }
 </style>
 </head><body>
-<img src="/stream" alt="flux cameras">
+<img src="/stream" alt="camera feed">
 </body></html>
 """
 
@@ -211,7 +211,7 @@ def move_channel(
         try:
             target_deg = float(raw)
         except ValueError:
-            print(f"  Entree non reconnue pour le canal {channel} (nombre, c, n ou x attendus).")
+            print(f"  Unrecognized input for channel {channel} (expected a number, c, n, or x).")
             return
     new_deg = move_to_angle(driver, calib, target_deg, current[channel], speed_deg_per_s)
     if new_deg != current[channel]:
@@ -227,7 +227,7 @@ def run(
     port: int,
     layout: str,
 ) -> None:
-    print("Demarrage des deux cameras...")
+    print("Starting both cameras...")
     cams = [CameraStream(0), CameraStream(1)]
     for cam in cams:
         cam.start()
@@ -235,7 +235,7 @@ def run(
     server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(cams[0], cams[1], layout))
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
-    print(f"Flux MJPEG sur http://<ip-du-pi>:{port}/ (ou via le port forwarding propose par VS Code).")
+    print(f"MJPEG stream at http://<pi-ip>:{port}/ (or via the port forwarding VS Code offers).")
 
     driver = Pca9685Driver(frequency_hz=frequency_hz)
     current: Dict[int, Optional[float]] = {
@@ -255,45 +255,45 @@ def run(
                 break
             parts = raw.split(maxsplit=1)
             if len(parts) != 2 or parts[0] not in ("0", "1"):
-                print("  Entree non reconnue (attendu : '0 <angle|c|n|x>' ou '1 <angle|c|n|x>').")
+                print("  Unrecognized input (expected '0 <angle|c|n|x>' or '1 <angle|c|n|x>').")
                 continue
             move_channel(driver, calibs, int(parts[0]), parts[1], current, speed_deg_per_s, positions_file)
     finally:
-        print("Arret en cours...")
+        print("Shutting down...")
         server.shutdown()
         for cam in cams:
             cam.stop()
         driver.close()
-        print("Termine (le bras garde sa derniere position, PWM toujours actif).")
+        print("Done (the arm keeps its last position, PWM still active).")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Flux camera live + pilotage terminal des 2 premiers axes, pour positionner les cameras."
+        description="Live camera feed + terminal control of the first 2 joints, for positioning the cameras."
     )
-    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="Fichier de calibration JSON")
+    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="JSON calibration file")
     parser.add_argument(
-        "--port", type=int, default=DEFAULT_PORT, help=f"Port HTTP du flux MJPEG (defaut {DEFAULT_PORT})"
+        "--port", type=int, default=DEFAULT_PORT, help=f"HTTP port for the MJPEG stream (default {DEFAULT_PORT})"
     )
     parser.add_argument(
         "--layout",
         choices=LAYOUT_CHOICES,
         default=DEFAULT_LAYOUT,
-        help=f"Disposition des deux images (defaut {DEFAULT_LAYOUT})",
+        help=f"Layout of the two images (default {DEFAULT_LAYOUT})",
     )
     parser.add_argument(
         "--speed",
         type=float,
         default=DEFAULT_SPEED_PERCENT,
         help=(
-            f"Vitesse de deplacement en %% de la vitesse max supposee du servo "
-            f"({MIN_SPEED_PERCENT:.0f}-{MAX_SPEED_PERCENT:.0f}, defaut {DEFAULT_SPEED_PERCENT:.0f})"
+            f"Movement speed as %% of the servo's assumed max speed "
+            f"({MIN_SPEED_PERCENT:.0f}-{MAX_SPEED_PERCENT:.0f}, default {DEFAULT_SPEED_PERCENT:.0f})"
         ),
     )
     args = parser.parse_args()
 
     if not MIN_SPEED_PERCENT <= args.speed <= MAX_SPEED_PERCENT:
-        parser.error(f"--speed doit etre entre {MIN_SPEED_PERCENT:.0f} et {MAX_SPEED_PERCENT:.0f}")
+        parser.error(f"--speed must be between {MIN_SPEED_PERCENT:.0f} and {MAX_SPEED_PERCENT:.0f}")
 
     data = load_all(args.file)
     calibs = {}
@@ -301,8 +301,8 @@ def main() -> None:
         raw = data.get("servos", {}).get(str(channel))
         if raw is None:
             sys.exit(
-                f"Canal {channel} non calibre dans {args.file} — "
-                f"lance calibrate_servo.py --channel {channel} d'abord."
+                f"Channel {channel} not calibrated in {args.file} — "
+                f"run calibrate_servo.py --channel {channel} first."
             )
         calibs[channel] = ServoCalibration(**raw)
     frequency_hz = data.get("pwm_frequency_hz", DEFAULT_FREQUENCY_HZ)

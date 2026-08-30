@@ -78,7 +78,7 @@ def find_calibration(data: dict, channel: Optional[int], name: Optional[str]) ->
 
 def resolve_calibration(data: dict, channel: Optional[int], name: Optional[str], path) -> ServoCalibration:
     if channel is None and name is None:
-        raw = input("Canal ou nom du servo a piloter : ").strip()
+        raw = input("Channel or name of the servo to control: ").strip()
         if raw.isdigit():
             channel = int(raw)
         else:
@@ -86,8 +86,8 @@ def resolve_calibration(data: dict, channel: Optional[int], name: Optional[str],
 
     calib = find_calibration(data, channel, name)
     if calib is None:
-        target = f"canal {channel}" if channel is not None else f"nom '{name}'"
-        sys.exit(f"Aucune calibration trouvee pour {target} dans {path}.")
+        target = f"channel {channel}" if channel is not None else f"name '{name}'"
+        sys.exit(f"No calibration found for {target} in {path}.")
     return calib
 
 
@@ -107,8 +107,8 @@ def move_to_angle(
     """
     if not calib.angle_min_deg <= target_deg <= calib.angle_max_deg:
         print(
-            f"  Erreur : {target_deg} deg hors bornes "
-            f"[{calib.angle_min_deg}, {calib.angle_max_deg}] pour '{calib.name}'."
+            f"  Error: {target_deg} deg out of bounds "
+            f"[{calib.angle_min_deg}, {calib.angle_max_deg}] for '{calib.name}'."
         )
         return current_deg
 
@@ -123,7 +123,7 @@ def move_to_angle(
 
     pulse_us = calib.pulse_for_angle(target_deg)
     driver.set_pulse_us(calib.channel, pulse_us)
-    print(f"  -> {calib.name} (canal {calib.channel}) a {target_deg} deg ({pulse_us:.0f}us)")
+    print(f"  -> {calib.name} (channel {calib.channel}) at {target_deg} deg ({pulse_us:.0f}us)")
     return target_deg
 
 
@@ -131,12 +131,12 @@ def run(calib: ServoCalibration, frequency_hz: int, speed_deg_per_s: float, posi
     driver = Pca9685Driver(frequency_hz=frequency_hz)
     current_deg = load_last_angle(calib.channel, positions_file)
     print(
-        f"Servo '{calib.name}' (canal {calib.channel}), "
-        f"bornes [{calib.angle_min_deg}, {calib.angle_max_deg}] deg, "
-        f"vitesse {speed_deg_per_s:.0f} deg/s."
+        f"Servo '{calib.name}' (channel {calib.channel}), "
+        f"bounds [{calib.angle_min_deg}, {calib.angle_max_deg}] deg, "
+        f"speed {speed_deg_per_s:.0f} deg/s."
     )
     if current_deg is not None:
-        print(f"Derniere position connue : {current_deg} deg (le servo n'a pas ete relache depuis).")
+        print(f"Last known position: {current_deg} deg (the servo hasn't been released since).")
     print(HELP_TEXT)
     try:
         while True:
@@ -153,7 +153,7 @@ def run(calib: ServoCalibration, frequency_hz: int, speed_deg_per_s: float, posi
                 driver.release(calib.channel)
                 current_deg = None
                 clear_last_angle(calib.channel, positions_file)
-                print("  -> servo relache (PWM coupe)")
+                print("  -> servo released (PWM cut)")
             else:
                 if raw == "c":
                     target_deg = 0.0
@@ -165,7 +165,7 @@ def run(calib: ServoCalibration, frequency_hz: int, speed_deg_per_s: float, posi
                     try:
                         target_deg = float(raw)
                     except ValueError:
-                        print("  Entree non reconnue (nombre, c, n, x, r ou q attendus).")
+                        print("  Unrecognized input (expected a number, c, n, x, r, or q).")
                         continue
                 new_deg = move_to_angle(driver, calib, target_deg, current_deg, speed_deg_per_s)
                 if new_deg != current_deg:
@@ -173,28 +173,28 @@ def run(calib: ServoCalibration, frequency_hz: int, speed_deg_per_s: float, posi
                     save_last_angle(calib.channel, current_deg, positions_file)
     finally:
         driver.close()
-        print("Session terminee (le servo garde sa position tant qu'il n'est pas relache avec 'r').")
+        print("Session ended (the servo keeps its position until released with 'r').")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Pilotage manuel d'un servo deja calibre, par angle.")
+    parser = argparse.ArgumentParser(description="Manual angle-based control of an already-calibrated servo.")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--channel", type=int, help="Canal PCA9685 du servo (0-15)")
-    group.add_argument("--name", help="Nom du servo (tel qu'enregistre lors de la calibration)")
-    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="Fichier de calibration JSON")
+    group.add_argument("--channel", type=int, help="PCA9685 channel of the servo (0-15)")
+    group.add_argument("--name", help="Servo name (as saved during calibration)")
+    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="JSON calibration file")
     parser.add_argument(
         "--speed",
         type=float,
         default=DEFAULT_SPEED_PERCENT,
         help=(
-            f"Vitesse de deplacement en %% de la vitesse max supposee du servo "
-            f"({MIN_SPEED_PERCENT:.0f}-{MAX_SPEED_PERCENT:.0f}, defaut {DEFAULT_SPEED_PERCENT:.0f})"
+            f"Movement speed as %% of the servo's assumed max speed "
+            f"({MIN_SPEED_PERCENT:.0f}-{MAX_SPEED_PERCENT:.0f}, default {DEFAULT_SPEED_PERCENT:.0f})"
         ),
     )
     args = parser.parse_args()
 
     if not MIN_SPEED_PERCENT <= args.speed <= MAX_SPEED_PERCENT:
-        parser.error(f"--speed doit etre entre {MIN_SPEED_PERCENT:.0f} et {MAX_SPEED_PERCENT:.0f}")
+        parser.error(f"--speed must be between {MIN_SPEED_PERCENT:.0f} and {MAX_SPEED_PERCENT:.0f}")
 
     data = load_all(args.file)
     frequency_hz = data.get("pwm_frequency_hz", DEFAULT_FREQUENCY_HZ)

@@ -72,7 +72,7 @@ def read_key() -> str:
 
 def prompt_angle(label: str, default: float) -> float:
     """Ask (Enter-terminated, unlike the rest of the controls) for the angle of a bound."""
-    raw = input(f"  Angle en degres pour la position '{label}' [{default}]: ").strip()
+    raw = input(f"  Angle in degrees for the '{label}' position [{default}]: ").strip()
     return float(raw) if raw else default
 
 
@@ -103,7 +103,7 @@ class CalibrationSession:
         self.angle_min = existing.angle_min_deg
         self.angle_max = existing.angle_max_deg
         self.pulse_us = existing.pulse_center_us
-        print(f"Calibration existante chargee pour le canal {self.channel} ({existing.name}).")
+        print(f"Existing calibration loaded for channel {self.channel} ({existing.name}).")
 
     def apply_pulse(self) -> None:
         self.pulse_us = clamp(self.pulse_us, HARD_PULSE_MIN_US, HARD_PULSE_MAX_US)
@@ -114,7 +114,7 @@ class CalibrationSession:
             return "?" if value is None else f"{value:.0f}us"
 
         return (
-            f"canal={self.channel} nom='{self.name}' pulse_actuelle={self.pulse_us:.0f}us pas={self.step_us:.0f}us\n"
+            f"channel={self.channel} name='{self.name}' current_pulse={self.pulse_us:.0f}us step={self.step_us:.0f}us\n"
             f"  min={fmt(self.min_us)} (angle={self.angle_min}) "
             f"center={fmt(self.center_us)} (angle=0) "
             f"max={fmt(self.max_us)} (angle={self.angle_max})"
@@ -169,7 +169,7 @@ def run(channel: int, name: Optional[str], calibration_file, frequency_hz: int) 
             elif key == "c":
                 session.center_us = session.pulse_us
                 session.dirty = True
-                print(f"  -> centre (0 deg) = {session.pulse_us:.0f}us")
+                print(f"  -> center (0 deg) = {session.pulse_us:.0f}us")
             elif key == "n":
                 session.angle_min = prompt_angle("min", session.angle_min if session.angle_min is not None else -90.0)
                 session.min_us = session.pulse_us
@@ -184,39 +184,39 @@ def run(channel: int, name: Optional[str], calibration_file, frequency_hz: int) 
                 print(session.status())
             elif key == "r":
                 driver.release(channel)
-                print("  -> servo relache (PWM coupe)")
+                print("  -> servo released (PWM cut)")
             elif key == "s":
                 calib = session.to_calibration()
                 if calib is None:
-                    print("  Impossible de sauvegarder : il manque min, center ou max.")
+                    print("  Cannot save: missing min, center, or max.")
                 else:
                     save_servo(calib, calibration_file, frequency_hz=frequency_hz)
                     session.dirty = False
-                    print(f"  -> sauvegarde dans {calibration_file}")
+                    print(f"  -> saved to {calibration_file}")
             elif key == "?":
                 print(HELP_TEXT)
             elif key == "q":
                 if session.dirty:
-                    confirm = input("Modifications non sauvegardees, quitter quand meme ? [y/N] ").strip().lower()
+                    confirm = input("Unsaved changes, quit anyway? [y/N] ").strip().lower()
                     if confirm != "y":
                         continue
                 break
     finally:
         driver.release(channel)
         driver.close()
-        print("Session terminee.")
+        print("Session ended.")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Calibration interactive d'un servo sur le PCA9685.")
-    parser.add_argument("--channel", type=int, required=True, help="Canal PCA9685 (0-15)")
-    parser.add_argument("--name", default=None, help="Nom du servo (ex: shoulder, elbow)")
-    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="Fichier de calibration JSON")
-    parser.add_argument("--frequency", type=int, default=DEFAULT_FREQUENCY_HZ, help="Frequence PWM en Hz (defaut 50)")
+    parser = argparse.ArgumentParser(description="Interactive calibration of a servo on the PCA9685.")
+    parser.add_argument("--channel", type=int, required=True, help="PCA9685 channel (0-15)")
+    parser.add_argument("--name", default=None, help="Servo name (e.g. shoulder, elbow)")
+    parser.add_argument("--file", default=DEFAULT_CALIBRATION_FILE, help="JSON calibration file")
+    parser.add_argument("--frequency", type=int, default=DEFAULT_FREQUENCY_HZ, help="PWM frequency in Hz (default 50)")
     args = parser.parse_args()
 
     if not 0 <= args.channel <= 15:
-        parser.error("--channel doit etre entre 0 et 15")
+        parser.error("--channel must be between 0 and 15")
 
     run(args.channel, args.name, args.file, args.frequency)
 

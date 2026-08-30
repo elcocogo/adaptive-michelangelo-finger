@@ -67,8 +67,8 @@ def make_charuco_board_image() -> Image.Image:
     board_img = board.generateImage((board_w_px, board_h_px), marginSize=0)
     return _add_caption(
         Image.fromarray(board_img),
-        f"ChArUco {SQUARES_X}x{SQUARES_Y} - carre {SQUARE_LENGTH_MM:.0f}mm - "
-        f"IMPRIMER A 100% (pas 'ajuster a la page')",
+        f"ChArUco {SQUARES_X}x{SQUARES_Y} - square {SQUARE_LENGTH_MM:.0f}mm - "
+        f"PRINT AT 100% (not 'fit to page')",
     )
 
 
@@ -89,7 +89,7 @@ def make_standalone_markers_image() -> Image.Image:
 
     return _add_caption(
         sheet,
-        f"{n} tags ArUco individuels - {STANDALONE_MARKER_MM:.0f}mm - IMPRIMER A 100%",
+        f"{n} standalone ArUco tags - {STANDALONE_MARKER_MM:.0f}mm - PRINT AT 100%",
     )
 
 
@@ -123,10 +123,10 @@ def main() -> None:
     save_as_pdf(markers_img, OUTPUT_DIR / "standalone_markers.pdf")
     markers_img.save(OUTPUT_DIR / "standalone_markers_preview.png")
 
-    print(f"Genere dans {OUTPUT_DIR}/ :")
-    print("  charuco_board.pdf          (a imprimer pour la calibration stereo)")
-    print("  standalone_markers.pdf     (tags individuels, pour plus tard)")
-    print("  *_preview.png              (apercu rapide, pas pour impression)")
+    print(f"Generated in {OUTPUT_DIR}/:")
+    print("  charuco_board.pdf          (print this for the stereo calibration)")
+    print("  standalone_markers.pdf     (individual tags, for later)")
+    print("  *_preview.png              (quick preview, not for printing)")
 
 
 if __name__ == "__main__":

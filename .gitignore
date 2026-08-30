@@ -16,3 +16,8 @@ calibration_data/
 # Generated print-ready calibration targets (derived from generate_targets.py,
 # not source — regenerate rather than version).
 camera_calibration/print_targets/
+
+# Raw calibration photos and their computed result: specific to this exact
+# physical camera rig (positions, focus, the printed board's real size) —
+# re-capture/re-run rather than version.
+camera_calibration/calibration_captures/
