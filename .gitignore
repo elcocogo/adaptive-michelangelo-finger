@@ -25,3 +25,7 @@ camera_calibration/calibration_captures/
 # Video recordings from tracking/follow_target.py --record: large binary
 # session output, not source.
 tracking/recordings/
+
+# Personal working documents (video scripts, presentation notes, etc.) —
+# not project source, not meant to be published in the repo.
+notes/
