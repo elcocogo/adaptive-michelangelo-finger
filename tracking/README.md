@@ -48,6 +48,13 @@ no-auto-release behavior as `move_servo.py`/`arm_show.py`).
 | `--port` | HTTP port for the preview (default 8100) |
 | `--standoff-mm` | How far short of the target the arm stops, in mm (default 100) |
 | `--point-gripper` | Also keep `gripper_arm` parallel to the wrist-target line (see above) |
+| `--record` | Save the same annotated view shown at `/stream` to an `.mp4` in `recordings/` |
+
+`--record` runs its own independent capture+annotate loop rather than
+piggybacking on the preview — the preview only draws frames while a
+browser is actually connected to `/stream`, but recording should keep
+going whether or not anyone's watching. Files are named
+`tracking_YYYYMMDD_HHMMSS.mp4`, not versioned (see `.gitignore`).
 
 The standoff is applied along the line from the shoulder pivot
 (`spin_joint`) to the target, so the arm keeps pointing at the target

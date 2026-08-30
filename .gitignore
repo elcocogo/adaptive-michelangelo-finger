@@ -21,3 +21,7 @@ camera_calibration/print_targets/
 # physical camera rig (positions, focus, the printed board's real size) —
 # re-capture/re-run rather than version.
 camera_calibration/calibration_captures/
+
+# Video recordings from tracking/follow_target.py --record: large binary
+# session output, not source.
+tracking/recordings/

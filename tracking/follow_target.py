@@ -36,7 +36,11 @@ aren't perfectly rigid — not done yet.)
 
 rpi502 has no display, so — same as the other camera tools — this serves
 a live preview over HTTP (MJPEG) with the target marker highlighted when
-seen, instead of opening a window.
+seen, instead of opening a window. Pass --record to also save that same
+annotated view to an .mp4 file (recordings/ — the preview server only
+draws frames while a browser is actually watching /stream, so recording
+runs its own independent capture+annotate loop rather than piggybacking
+on it).
 
 Usage:
     python3 -m tracking.follow_target
@@ -44,6 +48,7 @@ Usage:
     python3 -m tracking.follow_target --layout stacked
     python3 -m tracking.follow_target --standoff-mm 50
     python3 -m tracking.follow_target --point-gripper
+    python3 -m tracking.follow_target --record
 
 Commands (in the terminal, while the loop runs):
     q   quits (stops the loop, returns the arm to its home position —
@@ -54,10 +59,13 @@ from __future__ import annotations
 
 import argparse
 import io
+import sys
 import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, Optional
+from pathlib import Path
+from typing import Dict, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -102,11 +110,15 @@ DEFAULT_SPEED_PERCENT = 50.0
 # How far short of the target the arm stops, measured from the target
 # back towards the shoulder (see kinematics.arm_kinematics.apply_standoff)
 # — so the arm points at the target without actually touching it.
-DEFAULT_STANDOFF_MM = 120.0
+DEFAULT_STANDOFF_MM = 135.0
 MIN_LOOP_INTERVAL_S = 0.3  # floor between detection/IK cycles, not a hard cadence
 CAPTURE_FRAME_SIZE = (1536, 864)  # same as capture_stereo_images.py / calibrate_camera_to_arm.py
 STREAM_FPS = 10
 JPEG_QUALITY = 85
+
+RECORDINGS_DIR = Path(__file__).resolve().parent / "recordings"
+RECORDING_FPS = STREAM_FPS  # same cadence as the live preview it mirrors
+RECORDING_FOURCC = "mp4v"
 
 HELP_TEXT = __doc__.split("Commands", 1)[1]
 
@@ -124,9 +136,19 @@ def annotate(frame: np.ndarray, detector, target_id: int) -> np.ndarray:
     return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 
-def combined_preview_jpeg(
+def combined_frame_size(layout: str = DEFAULT_LAYOUT) -> Tuple[int, int]:
+    """The (width, height) of the combined annotated frame for a given
+    layout, computable up front from CAPTURE_FRAME_SIZE alone — used to
+    open the video writer before any real frame has been captured."""
+    w, h = CAPTURE_FRAME_SIZE
+    return (w, h * 2) if layout == LAYOUT_STACKED else (w * 2, h)
+
+
+def build_combined_frame(
     cam0: CameraStream, cam1: CameraStream, detector, target_id: int, layout: str = DEFAULT_LAYOUT
-) -> Optional[bytes]:
+) -> Optional[Image.Image]:
+    """Builds the annotated side-by-side/stacked frame — the same image
+    the MJPEG preview serves and --record saves to disk."""
     frame0, frame1 = cam0.latest(), cam1.latest()
     if frame0 is None or frame1 is None:
         return None
@@ -140,9 +162,40 @@ def combined_preview_jpeg(
         combined = Image.new("RGB", (img0.width + img1.width, max(img0.height, img1.height)))
         combined.paste(img0, (0, 0))
         combined.paste(img1, (img0.width, 0))
+    return combined
+
+
+def combined_preview_jpeg(
+    cam0: CameraStream, cam1: CameraStream, detector, target_id: int, layout: str = DEFAULT_LAYOUT
+) -> Optional[bytes]:
+    combined = build_combined_frame(cam0, cam1, detector, target_id, layout)
+    if combined is None:
+        return None
     buf = io.BytesIO()
     combined.save(buf, format="JPEG", quality=JPEG_QUALITY)
     return buf.getvalue()
+
+
+def recording_loop(
+    cams,
+    detector,
+    target_id: int,
+    layout: str,
+    writer: cv2.VideoWriter,
+    stop_event: threading.Event,
+) -> None:
+    """Independently builds and saves the same annotated view the MJPEG
+    preview shows, at RECORDING_FPS, regardless of whether anyone is
+    actually watching /stream right now."""
+    interval_s = 1.0 / RECORDING_FPS
+    while not stop_event.is_set():
+        loop_start = time.monotonic()
+        combined = build_combined_frame(cams[0], cams[1], detector, target_id, layout)
+        if combined is not None:
+            writer.write(cv2.cvtColor(np.array(combined), cv2.COLOR_RGB2BGR))
+        elapsed = time.monotonic() - loop_start
+        if elapsed < interval_s:
+            time.sleep(interval_s - elapsed)
 
 
 INDEX_HTML = b"""<!doctype html>
@@ -292,6 +345,7 @@ def run(
     layout: str = DEFAULT_LAYOUT,
     standoff_mm: float = DEFAULT_STANDOFF_MM,
     point_gripper: bool = False,
+    record: bool = False,
 ) -> None:
     print("Loading calibrations...")
     stereo_calib = load_stereo(DEFAULT_STEREO_CALIBRATION_FILE)
@@ -313,6 +367,17 @@ def run(
     server_thread.start()
     print(f"Preview at http://<pi-ip>:{port}/ (target tag highlighted in red when seen)")
 
+    video_writer = None
+    recording_thread = None
+    if record:
+        RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+        video_path = RECORDINGS_DIR / f"tracking_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*RECORDING_FOURCC)
+        video_writer = cv2.VideoWriter(str(video_path), fourcc, RECORDING_FPS, combined_frame_size(layout))
+        if not video_writer.isOpened():
+            sys.exit(f"Could not open {video_path} for recording (codec {RECORDING_FOURCC} unsupported?).")
+        print(f"Recording to {video_path}")
+
     stop_event = threading.Event()
     loop_thread = threading.Thread(
         target=tracking_loop,
@@ -320,6 +385,14 @@ def run(
         daemon=True,
     )
     loop_thread.start()
+
+    if record:
+        recording_thread = threading.Thread(
+            target=recording_loop,
+            args=(cams, detector, target_id, layout, video_writer, stop_event),
+            daemon=True,
+        )
+        recording_thread.start()
 
     print(HELP_TEXT)
     try:
@@ -335,6 +408,10 @@ def run(
         print("Shutting down...")
         stop_event.set()
         loop_thread.join(timeout=2.0)
+        if recording_thread is not None:
+            recording_thread.join(timeout=2.0)
+        if video_writer is not None:
+            video_writer.release()
         server.shutdown()
         for cam in cams:
             cam.stop()
@@ -374,6 +451,11 @@ def main() -> None:
         action="store_true",
         help="Also keep gripper_arm parallel to the wrist-target line, instead of just reaching a nearby position",
     )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help=f"Save the annotated camera view to an .mp4 in {RECORDINGS_DIR.name}/",
+    )
     args = parser.parse_args()
 
     if not MIN_SPEED_PERCENT <= args.speed <= MAX_SPEED_PERCENT:
@@ -382,7 +464,7 @@ def main() -> None:
         parser.error("--standoff-mm must be >= 0")
 
     speed_deg_per_s = MAX_SERVO_SPEED_DEG_PER_S * (args.speed / 100.0)
-    run(args.target_id, speed_deg_per_s, args.port, args.layout, args.standoff_mm, args.point_gripper)
+    run(args.target_id, speed_deg_per_s, args.port, args.layout, args.standoff_mm, args.point_gripper, args.record)
 
 
 if __name__ == "__main__":
