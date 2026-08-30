@@ -262,3 +262,95 @@ def apply_standoff(
     new_distance = max(distance - standoff_mm, 0.0)
     result = shoulder + offset * (new_distance / distance)
     return tuple(result)
+
+
+def inverse_kinematics_pointing(
+    target_mm: Tuple[float, float, float],
+    standoff_mm: float,
+    theta1_bounds: Tuple[float, float] = (-90.0, 90.0),
+    theta2_bounds: Tuple[float, float] = (-90.0, 90.0),
+    theta3_bounds: Tuple[float, float] = (-90.0, 90.0),
+    dims: ArmDimensions = DEFAULT_DIMENSIONS,
+) -> Tuple[float, float, float, float]:
+    """Points gripper_arm exactly at the target while stopping standoff_mm
+    short of it, instead of just reaching a nearby position.
+
+    Unlike inverse_kinematics_search (which only cares where the
+    fingertip ends up and treats theta3 as a free parameter to search
+    over), this pins theta3 so gripper_arm — the segment from the wrist
+    (midarm_joint) to the fingertip — is parallel to the line from the
+    wrist through the target.
+
+    The geometry falls out of gripper_arm's length being fixed
+    (dims.gripper_arm_mm): if the wrist ends up exactly
+    (gripper_arm_mm + standoff_mm) from the target, *along the straight
+    line from the shoulder to the target*, then simply pointing
+    gripper_arm at the target from there automatically leaves the
+    fingertip standoff_mm short — no search needed:
+      1. Place the wrist with apply_standoff(target, gripper_arm_mm +
+         standoff_mm) — reusing the same helper as the fingertip-only
+         case, just with a bigger pull-back distance.
+      2. Solve the ordinary 2-link IK (base_arm, mid_arm alone) to put
+         the wrist exactly there.
+      3. Because the wrist sits on the shoulder-target line by
+         construction, "point gripper_arm at the target" is the same as
+         "point it along that same line" — so theta3 is just whatever
+         angle closes the gap between mid_arm's own direction
+         (theta1+theta2) and that line's direction.
+
+    Tries elbow_up=True first, then elbow_up=False, returning the first
+    combination where theta1/theta2/theta3 all fall within the given
+    bounds (pass the real calibrated ones — this module doesn't read
+    calibration_data/servos.json itself, see the package README).
+
+    Raises ValueError if the target can't be pointed at within bounds
+    either way (including if it's out of reach entirely).
+    """
+    x, y, z = target_mm
+    theta0 = math.degrees(math.atan2(y, x))
+
+    r = math.hypot(x, y)
+    z_rel = z - dims.shoulder_height_mm
+    alpha_deg = math.degrees(math.atan2(r, z_rel))  # direction shoulder->target, from vertical
+
+    # The wrist lands on the shoulder-target line by construction of
+    # apply_standoff, so pointing gripper_arm at the target from there is
+    # equivalent to pointing it along this same alpha direction.
+    wrist_target = apply_standoff(target_mm, dims.gripper_arm_mm + standoff_mm, dims)
+    wx, wy, wz = wrist_target
+    distance_w = math.hypot(math.hypot(wx, wy), wz - dims.shoulder_height_mm)
+
+    l1 = dims.base_arm_mm
+    l2 = dims.mid_arm_mm
+    if distance_w > l1 + l2 or distance_w < abs(l1 - l2):
+        raise ValueError(
+            f"Target unreachable while pointing at it with a {standoff_mm:.0f}mm standoff: "
+            f"the wrist would need to be {distance_w:.1f}mm from the shoulder, but "
+            f"base_arm+mid_arm only spans {abs(l1 - l2):.1f}-{l1 + l2:.1f}mm."
+        )
+
+    cos_theta2 = (distance_w**2 - l1**2 - l2**2) / (2 * l1 * l2)
+    cos_theta2 = max(-1.0, min(1.0, cos_theta2))
+    theta2_mag = math.degrees(math.acos(cos_theta2))
+
+    cos_beta = (l1**2 + distance_w**2 - l2**2) / (2 * l1 * distance_w)
+    cos_beta = max(-1.0, min(1.0, cos_beta))
+    beta_deg = math.degrees(math.acos(cos_beta))
+
+    last_error: Optional[ValueError] = None
+    for elbow_up in (True, False):
+        theta2 = theta2_mag if elbow_up else -theta2_mag
+        theta1 = (alpha_deg - beta_deg) if elbow_up else (alpha_deg + beta_deg)
+        theta3 = alpha_deg - theta1 - theta2
+        if (
+            theta1_bounds[0] <= theta1 <= theta1_bounds[1]
+            and theta2_bounds[0] <= theta2 <= theta2_bounds[1]
+            and theta3_bounds[0] <= theta3 <= theta3_bounds[1]
+        ):
+            return theta0, theta1, theta2, theta3
+        last_error = ValueError(
+            f"elbow_up={elbow_up}: angles {theta1:.1f}/{theta2:.1f}/{theta3:.1f} deg out of bounds "
+            f"[{theta1_bounds}], [{theta2_bounds}], [{theta3_bounds}]."
+        )
+
+    raise last_error

@@ -5,20 +5,27 @@ inverse kinematics, and drives the arm to point at it — continuously.
 
 Pipeline, each cycle: detect_markers (both cameras) -> triangulate_points
 (camera 0's frame) -> apply the camera-to-arm transform (arm frame) ->
-apply_standoff (stop short of the target, see DEFAULT_STANDOFF_MM) ->
-inverse_kinematics_search (tries wrist angles until one keeps every
-joint within its calibrated bounds — plain inverse_kinematics alone can
-demand an elbow bend beyond basearm_joint's limit for some targets, even
-though the same point is reachable with a bent wrist) -> move_pose
-(ramped, synchronized across the 4 joints). Everything here is gluing
-together pieces already built and validated separately (stereo
-calibration, camera-to-arm calibration, kinematics, servo control) —
-this script itself has very little logic of its own.
+solve inverse kinematics -> move_pose (ramped, synchronized across the 4
+joints). Everything here is gluing together pieces already built and
+validated separately (stereo calibration, camera-to-arm calibration,
+kinematics, servo control) — this script itself has very little logic
+of its own.
 
-The arm aims at the target but stops DEFAULT_STANDOFF_MM short of it
-(along the line from the shoulder to the target — see
-kinematics.arm_kinematics.apply_standoff), so it doesn't actually touch
-whatever it's tracking. Adjust the constant below, or pass --standoff-mm.
+The arm aims at the target but stops DEFAULT_STANDOFF_MM short of it, so
+it doesn't actually touch whatever it's tracking. Two ways to do that,
+selected with --point-gripper:
+  - default (position only): apply_standoff pulls the *fingertip* back
+    along the shoulder-target line, then inverse_kinematics_search picks
+    whichever wrist angle keeps every joint within its calibrated bounds
+    — plain inverse_kinematics alone can demand an elbow bend beyond
+    basearm_joint's limit for some targets, even though the same point
+    is reachable with a bent wrist.
+  - --point-gripper: inverse_kinematics_pointing additionally pins the
+    wrist angle so gripper_arm itself stays parallel to the line from
+    the wrist through the target — the arm doesn't just get *near* the
+    target, its last segment visibly points at it, still stopping
+    standoff_mm short.
+Adjust DEFAULT_STANDOFF_MM below, or pass --standoff-mm.
 
 Only channels 0-3 (position) are driven; the gripper (channel 4) is left
 wherever it was. The arm's own fingertip position is *not* visually
@@ -36,6 +43,7 @@ Usage:
     python3 -m tracking.follow_target --target-id 0 --speed 40
     python3 -m tracking.follow_target --layout stacked
     python3 -m tracking.follow_target --standoff-mm 50
+    python3 -m tracking.follow_target --point-gripper
 
 Commands (in the terminal, while the loop runs):
     q   quits (stops the loop, returns the arm to its home position —
@@ -65,7 +73,7 @@ from camera_calibration.live_view import (
 )
 from camera_calibration.stereo_data import DEFAULT_STEREO_CALIBRATION_FILE, load as load_stereo
 from camera_calibration.triangulation import triangulate_points
-from kinematics.arm_kinematics import apply_standoff, inverse_kinematics_search
+from kinematics.arm_kinematics import apply_standoff, inverse_kinematics_pointing, inverse_kinematics_search
 from servo_calibration.arm_show import (
     CH_BASE_ARM,
     CH_BASE_SPIN,
@@ -94,7 +102,7 @@ DEFAULT_SPEED_PERCENT = 50.0
 # How far short of the target the arm stops, measured from the target
 # back towards the shoulder (see kinematics.arm_kinematics.apply_standoff)
 # — so the arm points at the target without actually touching it.
-DEFAULT_STANDOFF_MM = 100.0
+DEFAULT_STANDOFF_MM = 120.0
 MIN_LOOP_INTERVAL_S = 0.3  # floor between detection/IK cycles, not a hard cadence
 CAPTURE_FRAME_SIZE = (1536, 864)  # same as capture_stereo_images.py / calibrate_camera_to_arm.py
 STREAM_FPS = 10
@@ -205,6 +213,7 @@ def tracking_loop(
     target_id: int,
     speed_deg_per_s: float,
     standoff_mm: float,
+    point_gripper: bool,
     positions_file,
     stop_event: threading.Event,
 ) -> None:
@@ -227,22 +236,33 @@ def tracking_loop(
                 center1 = found1[target_id].mean(axis=0, keepdims=True)
                 point_cam = triangulate_points(center0, center1, stereo_calib)[0]
                 point_arm_mm = (arm_R @ point_cam + arm_T) * 1000.0
-                aim_point_mm = apply_standoff(tuple(point_arm_mm), standoff_mm)
+                theta1_bounds = (calibs[CH_BASE_ARM].angle_min_deg, calibs[CH_BASE_ARM].angle_max_deg)
+                theta2_bounds = (calibs[CH_MID_ARM].angle_min_deg, calibs[CH_MID_ARM].angle_max_deg)
+                theta3_bounds = (calibs[CH_GRIPPER_ARM].angle_min_deg, calibs[CH_GRIPPER_ARM].angle_max_deg)
 
                 try:
-                    theta0, theta1, theta2, theta3 = inverse_kinematics_search(
-                        *aim_point_mm,
-                        theta1_bounds=(calibs[CH_BASE_ARM].angle_min_deg, calibs[CH_BASE_ARM].angle_max_deg),
-                        theta2_bounds=(calibs[CH_MID_ARM].angle_min_deg, calibs[CH_MID_ARM].angle_max_deg),
-                        theta3_bounds=(calibs[CH_GRIPPER_ARM].angle_min_deg, calibs[CH_GRIPPER_ARM].angle_max_deg),
-                    )
+                    if point_gripper:
+                        # inverse_kinematics_pointing works out the standoff
+                        # itself (from the *wrist*, so gripper_arm ends up
+                        # parallel to the wrist-target line) — it wants the
+                        # raw target, not one pre-adjusted by apply_standoff.
+                        theta0, theta1, theta2, theta3 = inverse_kinematics_pointing(
+                            tuple(point_arm_mm), standoff_mm, theta1_bounds, theta2_bounds, theta3_bounds
+                        )
+                    else:
+                        aim_point_mm = apply_standoff(tuple(point_arm_mm), standoff_mm)
+                        theta0, theta1, theta2, theta3 = inverse_kinematics_search(
+                            *aim_point_mm,
+                            theta1_bounds=theta1_bounds,
+                            theta2_bounds=theta2_bounds,
+                            theta3_bounds=theta3_bounds,
+                        )
                 except ValueError as e:
                     print(f"  Target out of reach: {e}")
                 else:
                     print(
                         f"  Target (arm frame): x={point_arm_mm[0]:.1f} y={point_arm_mm[1]:.1f} "
-                        f"z={point_arm_mm[2]:.1f}mm, aiming {standoff_mm:.0f}mm short at "
-                        f"x={aim_point_mm[0]:.1f} y={aim_point_mm[1]:.1f} z={aim_point_mm[2]:.1f}mm "
+                        f"z={point_arm_mm[2]:.1f}mm, {standoff_mm:.0f}mm standoff "
                         f"-> angles {theta0:.1f}/{theta1:.1f}/{theta2:.1f}/{theta3:.1f} deg"
                     )
                     pose = {
@@ -271,6 +291,7 @@ def run(
     port: int,
     layout: str = DEFAULT_LAYOUT,
     standoff_mm: float = DEFAULT_STANDOFF_MM,
+    point_gripper: bool = False,
 ) -> None:
     print("Loading calibrations...")
     stereo_calib = load_stereo(DEFAULT_STEREO_CALIBRATION_FILE)
@@ -295,7 +316,7 @@ def run(
     stop_event = threading.Event()
     loop_thread = threading.Thread(
         target=tracking_loop,
-        args=(cams, detector, driver, calibs, stereo_calib, arm_R, arm_T, target_id, speed_deg_per_s, standoff_mm, DEFAULT_POSITIONS_FILE, stop_event),
+        args=(cams, detector, driver, calibs, stereo_calib, arm_R, arm_T, target_id, speed_deg_per_s, standoff_mm, point_gripper, DEFAULT_POSITIONS_FILE, stop_event),
         daemon=True,
     )
     loop_thread.start()
@@ -348,6 +369,11 @@ def main() -> None:
         default=DEFAULT_STANDOFF_MM,
         help=f"How far short of the target the arm stops, in mm (default {DEFAULT_STANDOFF_MM:.0f})",
     )
+    parser.add_argument(
+        "--point-gripper",
+        action="store_true",
+        help="Also keep gripper_arm parallel to the wrist-target line, instead of just reaching a nearby position",
+    )
     args = parser.parse_args()
 
     if not MIN_SPEED_PERCENT <= args.speed <= MAX_SPEED_PERCENT:
@@ -356,7 +382,7 @@ def main() -> None:
         parser.error("--standoff-mm must be >= 0")
 
     speed_deg_per_s = MAX_SERVO_SPEED_DEG_PER_S * (args.speed / 100.0)
-    run(args.target_id, speed_deg_per_s, args.port, args.layout, args.standoff_mm)
+    run(args.target_id, speed_deg_per_s, args.port, args.layout, args.standoff_mm, args.point_gripper)
 
 
 if __name__ == "__main__":
