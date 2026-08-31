@@ -1,15 +1,17 @@
 # Adaptive Michelangelo Finger
 
-A robotic arm that reaches out to touch your fingertip — Michelangelo's
-*Creation of Adam*, in hardware. Two stereo cameras locate a target in
-3D space, and a 5-DOF arm points at it in real time, stopping just short
-of contact.
+Michelangelo's *Creation of Adam*, in hardware. Two 3D-printed replicas
+of the fresco's almost-touching fingers face off: one mounted on a
+5-DOF robotic arm, the other on a hand-held wand moved around by a
+person. Two stereo cameras locate the wand's fingertip in 3D space, and
+the arm tracks it in real time, closing the gap to a fixed distance —
+never quite touching, just like the painting.
 
 This README covers the **hardware bring-up and software pipeline**:
 system setup, servo control, camera calibration, kinematics, and the
 tracking loop that ties them together, in the order they were actually
-built. The mechanical design (3D-printed parts), the physical
-construction process, and the hands-on camera positioning are
+built. The mechanical design (the 3D-printed fingers and arm parts), the
+physical construction process, and the hands-on camera positioning are
 documented separately.
 
 ## Hardware
@@ -27,13 +29,13 @@ documented separately.
    rotation/translation between them).
 2. A one-time calibration locates the arm's own reference frame inside
    that stereo camera frame.
-3. At runtime, a target (currently an ArUco marker, standing in for a
-   fingertip) is detected in both camera images and triangulated into a
-   3D point.
+3. At runtime, the target — the wand-mounted printed finger, tracked via
+   an ArUco tag — is detected in both camera images and triangulated into
+   a 3D point.
 4. That point is converted into the arm's frame, then into joint angles
    via inverse kinematics.
 5. The arm moves there, stopping a configurable distance short of the
-   target so it never actually touches it.
+   target so the two fingers never actually touch.
 
 ## The build, in order
 
@@ -180,14 +182,16 @@ python3 -m tracking.follow_target --point-gripper
   between two independent measurements.
 - Kinematics: sub-micron forward/inverse round-trip error; sub-0.001°
   pointing accuracy.
-- A working closed-loop demo: the arm visually tracks a moving target
-  and points its gripper at it in real time, stopping short of contact.
+- A working closed-loop demo: the arm visually tracks the hand-held
+  finger and points its own printed finger at it in real time, stopping
+  short of contact — the fresco's gap, recreated.
 
 ## Known limitations
 
 - The arm's own tip position is never visually verified — only computed
   from calibration + commanded angles. Accurate enough in testing that a
   planned second-marker verification step was deliberately not pursued.
-- The target must currently be an ArUco tag, not a bare hand — a
-  deliberate simplification to validate the geometric pipeline against a
-  reliable detector before tackling fingertip detection.
+- The target is tracked via an ArUco tag on the wand, not by detecting
+  the printed finger itself — a deliberate simplification to validate
+  the geometric pipeline against a reliable detector rather than a
+  harder, less deterministic vision problem.
