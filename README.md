@@ -1,18 +1,31 @@
 # Adaptive Michelangelo Finger
 
-Michelangelo's *Creation of Adam*, in hardware. Two 3D-printed replicas
+![Robotic arm and hand-held printed hands reaching towards each other, Creation of Adam style](images/banner.jpeg)
+
+Michelangelo's *Creation of Adam*, in hardware. Two printed replicas
 of the fresco's almost-touching fingers face off: one mounted on a
-5-DOF robotic arm, the other on a hand-held wand moved around by a
-person. Two stereo cameras locate the wand's fingertip in 3D space, and
-the arm tracks it in real time, closing the gap to a fixed distance —
-never quite touching, just like the painting.
+5-DOF robotic arm, the other on a hand-held wand. Two stereo cameras locate the wand's fingertip in 3D space, and the arm tracks it in real time, closing the gap to a fixed distance.
+
+Built in four days as a demo project for my application to the European
+Robotics House — my first robotics project outside of simulation.
+Designed with Claude's help, starting from an open-source 3D-printable
+robot arm model adapted to fit my own 3D printer and built entirely from
+the electronics I already had on hand (see `3d_models/` for the
+mechanical design and its license).
+
+A short video of the finished build, tracking and pointing in real time:
+
+🎥 **[Watch it in action](https://www.youtube.com/watch?v=kySiUsr60nE)**
+
+![Close-up of the arm's wrist joint with the printed hand, and the floor-mounted ArUco calibration tags](images/image1.jpeg)
+![The stereo camera pair mounted on its 3D-printed bracket](images/image2.jpeg)
 
 This README covers the **hardware bring-up and software pipeline**:
 system setup, servo control, camera calibration, kinematics, and the
 tracking loop that ties them together, in the order they were actually
-built. The mechanical design (the 3D-printed fingers and arm parts), the
-physical construction process, and the hands-on camera positioning are
-documented separately.
+built. The mechanical design (`3d_models/` — modified from a base
+design, see its `LICENSE.md`), the physical construction process, and
+the hands-on camera positioning are documented separately.
 
 ## Hardware
 
@@ -22,6 +35,8 @@ documented separately.
 - A 5-DOF arm: base rotation (`base_joint`) → shoulder (`spin_joint`) →
   elbow (`basearm_joint`) → wrist (`midarm_joint`) → gripper
   (`gripper_joint`)
+
+![Fritzing](images/michelangelo_fritzing.svg)
 
 ## How it works, end to end
 
@@ -147,6 +162,7 @@ choice, not a shortcut waiting to be fixed.
 | `kinematics/` | Forward/inverse kinematics, pure geometry, no hardware dependency |
 | `tracking/` | The live visual tracking loop |
 | `calibration_data/` | Generated calibration results (not versioned — device-specific) |
+| `3d_models/` | FreeCAD sources + STEP exports for the printed parts, adapted for MG90S servos (see `LICENSE.md`) |
 
 Each directory has its own README with full usage details.
 

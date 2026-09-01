@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+# macOS folder metadata
+.DS_Store
+
 # Virtual environment (see requirements.txt for how it's created on rpi502)
 .venv/
 
@@ -26,6 +29,6 @@ camera_calibration/calibration_captures/
 # session output, not source.
 tracking/recordings/
 
-# Personal working documents (video scripts, presentation notes, etc.) —
+# Personal working documents —
 # not project source, not meant to be published in the repo.
 notes/

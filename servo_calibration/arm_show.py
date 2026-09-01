@@ -71,7 +71,7 @@ Pose = Dict[int, float]
 HOME: Pose = {CH_BASE_SPIN: 0.0, CH_BASE_ARM: 0.0, CH_MID_ARM: 0.0, CH_GRIPPER_ARM: 0.0, CH_GRIPPER: 15.0}
 
 SEQUENCE: List[Tuple[str, Pose]] = [
-    ("Starting position (arm vertical, gripper half-open)", HOME),
+    ("Starting position (arm vertical, gripper open)", HOME),
     ("Full horizontal extension (arm reaching out)",
      {CH_BASE_ARM: 90.0, CH_MID_ARM: 0.0, CH_GRIPPER_ARM: 0.0}),
     ("Compact fold (folded in a Z onto itself)",

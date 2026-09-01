@@ -17,10 +17,11 @@ in `calibration_data/servos.json` at the project root.
 
 ## Prerequisites
 
-- PCA9685 wired (I2C on the GPIO header + a separate external supply on
-  the V+ block) and detected:
+- PCA9685 wired and detected — on the software I2C bus, `/dev/i2c-3`
+  (GPIO23=SDA/GPIO24=SCL), not the header's dedicated I2C1 pins, which
+  are permanently dead on `rpi502` (see `CLAUDE.md`):
   ```bash
-  i2cdetect -y 1   # should show 40 on the 40 row
+  i2cdetect -y 3   # should show 40 on the 40 row
   ```
 - Virtual environment activated:
   ```bash
@@ -219,8 +220,8 @@ it keeps its last pose).
 
 ## 4. `go_home.py` — return to home position
 
-Moves all 5 channels to 0° (vertical, gripper half-open) — the same
-`HOME` pose `arm_show.py` starts and ends its sequence with.
+Moves all position channels to 0° (vertical) and the gripper fully open —
+the same `HOME` pose `arm_show.py` starts and ends its sequence with.
 
 ```bash
 python3 -m servo_calibration.go_home

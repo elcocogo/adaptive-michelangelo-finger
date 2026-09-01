@@ -4,7 +4,7 @@
 ArUco tag (default ID 0) in both cameras, triangulates its 3D position,
 converts it into the arm's frame, solves inverse kinematics, and drives
 the arm to point at it — continuously, until you quit. The arm stops
-short of the target by a configurable standoff (100mm by default) rather
+short of the target by a configurable standoff (135mm by default) rather
 than reaching all the way to it, so it points at whatever it's tracking
 without touching it.
 
@@ -46,7 +46,7 @@ no-auto-release behavior as `move_servo.py`/`arm_show.py`).
 | `--target-id` | ArUco tag ID to track (default 0) |
 | `--speed` | Movement speed as % of the servo's assumed max speed, 10-100 (default 50) |
 | `--port` | HTTP port for the preview (default 8100) |
-| `--standoff-mm` | How far short of the target the arm stops, in mm (default 100) |
+| `--standoff-mm` | How far short of the target the arm stops, in mm (default 135) |
 | `--point-gripper` | Also keep `gripper_arm` parallel to the wrist-target line (see above) |
 | `--record` | Save the same annotated view shown at `/stream` to an `.mp4` in `recordings/` |
 
@@ -65,19 +65,18 @@ it — `inverse_kinematics` then correctly rejects that as unreachable
 (logged as "Target out of reach") rather than doing something
 nonsensical.
 
-## What it does *not* do (yet)
+## Known limitations
 
-- **The arm's own tip position isn't visually verified.** `inverse_kinematics`
-  is trusted open-loop: the commanded angles are assumed to put the tip
-  exactly where the math says. A planned refinement is to tape a second
-  ArUco tag on the arm itself and use it to check/correct for the arm's
-  real mechanical precision, since it isn't perfectly rigid — not
-  implemented yet.
-- **The target is a tag, not a bare finger.** Using a marker was a
-  deliberate simplification to validate the full geometric pipeline
-  (triangulation -> arm frame -> IK -> movement) against a detector
-  that's already proven reliable, before tackling the harder, less
-  deterministic problem of detecting an actual fingertip.
+- **The arm's own tip position isn't visually verified.** The commanded
+  angles are trusted open-loop to put the tip exactly where the math
+  says. Taping a second ArUco tag on the arm itself, to check/correct
+  for the fact it isn't perfectly rigid, was considered and deliberately
+  not pursued — accurate enough in practice.
+- **The target is tracked via an ArUco tag, not by detecting the printed
+  finger itself.** A deliberate simplification to validate the full
+  geometric pipeline (triangulation -> arm frame -> IK -> movement)
+  against a detector that's already proven reliable, rather than a
+  harder, less deterministic vision problem.
 
 ## Prerequisites
 

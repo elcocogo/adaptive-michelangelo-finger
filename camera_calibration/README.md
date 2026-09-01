@@ -50,7 +50,7 @@ limit positions):
 | Input | Action |
 |---|---|
 | `0 <angle\|c\|n\|x>` | channel 0 — base rotation / azimuth |
-| `1 <angle\|c\|n\|x>` | channel 1 — shoulder (vertical at 0°, horizontal at ±90°) |
+| `1 <angle\|c\|n\|x>` | channel 1 — shoulder (vertical at 0°, horizontal at its calibrated max) |
 | `q` | quits (stops the stream and the server) |
 
 `c`/`n`/`x` go to center, the calibrated min bound, and the calibrated max
@@ -147,7 +147,7 @@ is properly flat and rigid. The result is saved to
 distortion for a detected point; `R`/`T` then let you combine the same
 point's position in both (undistorted) images into one 3D point via
 triangulation (`cv2.triangulatePoints`) — the next step once a target
-(an ArUco marker for now, a fingertip later) can be located in both
+(the ArUco tag on the tracking wand) can be located in both
 views. That 3D point comes out in camera 0's coordinate frame, not the
 arm's — converting between the two is the camera-to-arm calibration this
 stereo calibration unblocks.
@@ -171,8 +171,8 @@ align the tags to any particular rotation either (see below).
 
 ```bash
 python3 -m camera_calibration.calibrate_camera_to_arm \
-    --marker1-id 0 --marker1-x-mm 150 --marker1-y-mm 120 \
-    --marker2-id 1 --marker2-x-mm 150 --marker2-y-mm -120 \
+    --marker1-id 2 --marker1-x-mm 150 --marker1-y-mm 120 \
+    --marker2-id 3 --marker2-x-mm 150 --marker2-y-mm -120 \
     --samples 20
 ```
 
