@@ -6,8 +6,7 @@ Michelangelo's *Creation of Adam*, in hardware. Two printed replicas
 of the fresco's almost-touching fingers face off: one mounted on a
 5-DOF robotic arm, the other on a hand-held wand. Two stereo cameras locate the wand's fingertip in 3D space, and the arm tracks it in real time, closing the gap to a fixed distance.
 
-Built in 4 days as a demo project for my application to the European
-Robotics House — my first robotics project outside of simulation.
+Built in 4 days as a demo project — my first robotics project outside of simulation.
 Built with Claude's help on the software side, on top of an open-source
 3D-printable robot arm model I reworked by hand to fit my own 3D printer
 and the electronics I already had (see `3d_models/` for the mechanical
