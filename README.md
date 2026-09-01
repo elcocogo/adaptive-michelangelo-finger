@@ -16,6 +16,8 @@ A short video of the finished build, tracking and pointing in real time:
 
 🎥 **[Watch it in action](https://www.youtube.com/watch?v=kySiUsr60nE)**
 
+![Youtube](images/image3.png)
+
 ![Close-up of the arm's wrist joint with the printed hand, and the floor-mounted ArUco calibration tags](images/image1.jpeg)
 ![The stereo camera pair mounted on its 3D-printed bracket](images/image2.jpeg)
 
